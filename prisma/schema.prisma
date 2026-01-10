@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Interview {
+  id          String   @id @default(uuid())
+  role        String
+  skills      String   // JSON array
+  difficulty  String
+  rubric      String   // JSON object
+  redFlags    String   // JSON array
+  style       String   @default("neutral")
+  createdAt   DateTime @default(now())
+  
+  sessions    InterviewSession[]
+  
+  @@map("interviews")
+}
+
+model InterviewSession {
+  id           String   @id @default(uuid())
+  interviewId  String
+  candidateName String
+  candidateEmail String
+  status       String   @default("pending") // pending, active, completed
+  currentStep  Int      @default(0)
+  responses    String   // JSON array of Q&A
+  evaluation   String?  // JSON evaluation result
+  createdAt    DateTime @default(now())
+  completedAt  DateTime?
+  
+  interview    Interview @relation(fields: [interviewId], references: [id])
+  
+  @@map("interview_sessions")
+}
+
+model Evaluation {
+  id        String   @id @default(uuid())
+  sessionId String   @unique
+  scores    String   // JSON object with skill scores
+  evidence  String   // JSON array of evidence snippets
+  recommendation String // proceed, borderline, review
+  confidence Float
+  redFlags  String   // JSON array of detected red flags
+  createdAt DateTime @default(now())
+  
+  @@map("evaluations")
+}
