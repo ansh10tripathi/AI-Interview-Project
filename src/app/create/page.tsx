@@ -7,8 +7,18 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { InterviewConfig } from '@/types/interview'
 import { useRoleGuard } from '@/lib/useRoleGuard'
+import { useEffect } from 'react'
 
 export default function CreateInterview() {
+  const router = useRouter()
+  const isCandidate = typeof window !== 'undefined' && window.location.pathname.startsWith('/interview')
+  
+  useEffect(() => {
+    if (isCandidate) {
+      router.push('/interview')
+    }
+  }, [isCandidate, router])
+  
   useRoleGuard('admin');
   const router = useRouter()
   const [loading, setLoading] = useState(false)

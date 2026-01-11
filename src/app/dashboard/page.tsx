@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useRoleGuard } from '@/lib/useRoleGuard'
 
@@ -19,10 +20,12 @@ interface EvaluationSummary {
 
 export default function Dashboard() {
   useRoleGuard('admin');
+  const router = useRouter()
   const [evaluations, setEvaluations] = useState<EvaluationSummary[]>([])
   const [interviews, setInterviews] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedEvaluation, setSelectedEvaluation] = useState<any>(null)
+  const [deletingSession, setDeletingSession] = useState<string | null>(null)
 
   useEffect(() => {
     fetchData()
@@ -79,6 +82,41 @@ export default function Dashboard() {
     const link = `${window.location.origin}/interview?id=${interviewId}`
     navigator.clipboard.writeText(link)
     alert('Interview link copied to clipboard!')
+  }
+
+  const deleteSession = async (sessionId: string, sessionName: string) => {
+    if (!confirm(`Delete session for ${sessionName}? This cannot be undone.`)) {
+      return
+    }
+    
+    setDeletingSession(sessionId)
+    try {
+      const response = await fetch('/api/sessions/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        // Remove from interviews list
+        setInterviews(prev => prev.map(interview => ({
+          ...interview,
+          sessions: interview.sessions?.filter((s: any) => s.id !== sessionId) || []
+        })))
+        
+        // Remove from evaluations list
+        setEvaluations(prev => prev.filter(evaluation => evaluation.sessionId !== sessionId))
+      } else {
+        alert('Failed to delete session')
+      }
+    } catch (error) {
+      console.error('Error deleting session:', error)
+      alert('Failed to delete session')
+    } finally {
+      setDeletingSession(null)
+    }
   }
 
   if (loading) {
@@ -224,7 +262,7 @@ export default function Dashboard() {
                     <p className="text-sm text-gray-600 mb-3">
                       Skills: {JSON.parse(interview.skills).join(', ')}
                     </p>
-                    <div className="flex space-x-2">
+                    <div className="flex space-x-2 mb-3">
                       <Button
                         size="sm"
                         variant="outline"
@@ -233,6 +271,33 @@ export default function Dashboard() {
                         Copy Link
                       </Button>
                     </div>
+                    {interview.sessions && interview.sessions.length > 0 && (
+                      <div className="border-t pt-3">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Sessions:</h4>
+                        <div className="space-y-2">
+                          {interview.sessions.map((session: any) => (
+                            <div key={session.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
+                              <div>
+                                <span className="text-sm font-medium">{session.candidateName}</span>
+                                <span className={`ml-2 px-2 py-1 text-xs rounded ${
+                                  session.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {session.status}
+                                </span>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => deleteSession(session.id, session.candidateName)}
+                                disabled={deletingSession === session.id}
+                              >
+                                {deletingSession === session.id ? 'Deleting...' : 'Delete'}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -31,8 +31,14 @@ export class InterviewStateMachine {
     isComplete: boolean;
     needsFollowUp?: boolean;
   }> {
+    // Initialize first question if no active question exists
     if (!this.state.nextQuestion) {
-      throw new Error('No active question');
+      const firstQuestion = await aiService.generateQuestion(
+        this.config,
+        this.state.currentStep,
+        this.state.responses
+      );
+      this.state.nextQuestion = firstQuestion;
     }
 
     // Record the response

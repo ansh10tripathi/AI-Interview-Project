@@ -24,7 +24,7 @@ export default function RootLayout({
                 <h1 className="text-xl font-bold text-gray-900">InterviewOS</h1>
               </div>
               <div className="flex items-center space-x-4">
-                <a href="/" className="text-gray-700 hover:text-gray-900">Home</a>
+                <a href="/" className="text-gray-700 hover:text-gray-900 admin-only">Home</a>
                 <a href="/create" className="text-gray-700 hover:text-gray-900 admin-only">Create Interview</a>
                 <a href="/dashboard" className="text-gray-700 hover:text-gray-900 admin-only">Dashboard</a>
               </div>
@@ -36,7 +36,8 @@ export default function RootLayout({
         </main>
         <script dangerouslySetInnerHTML={{
           __html: `
-            if (window.location.pathname.startsWith('/interview') || new URLSearchParams(window.location.search).get('role') === 'candidate') {
+            const isCandidate = window.location.pathname.startsWith('/interview');
+            if (isCandidate) {
               document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
             }
           `

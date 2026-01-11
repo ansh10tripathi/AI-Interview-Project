@@ -1,12 +1,20 @@
 'use client'
 
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { useEffect } from 'react'
 
 export default function Home() {
   const searchParams = useSearchParams()
-  const isCandidate = searchParams.get('role') === 'candidate'
+  const router = useRouter()
+  const isCandidate = typeof window !== 'undefined' && window.location.pathname.startsWith('/interview')
+  
+  useEffect(() => {
+    if (isCandidate) {
+      router.push('/interview')
+    }
+  }, [isCandidate, router])
   
   if (isCandidate) {
     return (

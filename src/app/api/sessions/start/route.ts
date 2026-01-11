@@ -61,10 +61,21 @@ export async function POST(request: NextRequest) {
     const stateMachine = new InterviewStateMachine(config);
     const firstQuestion = await stateMachine.start();
 
+    // Persist initial state with first question active
+    await prisma.interviewSession.update({
+      where: { id: session.id },
+      data: {
+        currentStep: 0,
+        responses: JSON.stringify([])
+      }
+    });
+
     return NextResponse.json({
       success: true,
       sessionId: session.id,
-      question: firstQuestion
+      question: firstQuestion,
+      questionIndex: 0,
+      totalQuestions: 5
     });
   } catch (error) {
     console.error('Error starting session:', error);

@@ -37,6 +37,12 @@ export async function POST(request: NextRequest) {
     stateMachine.getState().responses = responses;
     stateMachine.getState().currentStep = session.currentStep;
 
+    // Validate interview state before submitting answer
+    if (session.currentStep === 0 && responses.length === 0) {
+      // Initialize first question if starting fresh
+      await stateMachine.start();
+    }
+
     // Submit answer and get next question
     const result = await stateMachine.submitAnswer(answer);
     
@@ -82,6 +88,15 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error submitting answer:', error);
+    
+    // Handle specific "No active question" error
+    if (error instanceof Error && error.message === 'No active question') {
+      return NextResponse.json(
+        { success: false, error: 'Interview not initialized. Please restart session.' },
+        { status: 409 }
+      );
+    }
+    
     return NextResponse.json(
       { success: false, error: 'Failed to submit answer' },
       { status: 500 }
