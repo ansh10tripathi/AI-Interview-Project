@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useRoleGuard } from '@/lib/useRoleGuard'
+import { logout } from '@/lib/logout'
 
 interface EvaluationSummary {
   id: string
@@ -19,13 +20,14 @@ interface EvaluationSummary {
 }
 
 export default function Dashboard() {
-  useRoleGuard('admin');
+  const isChecking = useRoleGuard('admin');
   const router = useRouter()
   const [evaluations, setEvaluations] = useState<EvaluationSummary[]>([])
   const [interviews, setInterviews] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedEvaluation, setSelectedEvaluation] = useState<any>(null)
   const [deletingSession, setDeletingSession] = useState<string | null>(null)
+  const [deletingInterview, setDeletingInterview] = useState<string | null>(null)
 
   useEffect(() => {
     fetchData()
@@ -100,13 +102,11 @@ export default function Dashboard() {
       const result = await response.json()
       
       if (result.success) {
-        // Remove from interviews list
         setInterviews(prev => prev.map(interview => ({
           ...interview,
           sessions: interview.sessions?.filter((s: any) => s.id !== sessionId) || []
         })))
         
-        // Remove from evaluations list
         setEvaluations(prev => prev.filter(evaluation => evaluation.sessionId !== sessionId))
       } else {
         alert('Failed to delete session')
@@ -119,7 +119,39 @@ export default function Dashboard() {
     }
   }
 
-  if (loading) {
+  const deleteInterview = async (interviewId: string, role: string) => {
+    if (!confirm(`Delete interview "${role}" and all its sessions? This cannot be undone.`)) {
+      return
+    }
+    
+    setDeletingInterview(interviewId)
+    try {
+      const response = await fetch('/api/interviews/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interviewId })
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setInterviews(prev => prev.filter(interview => interview.id !== interviewId))
+        setEvaluations(prev => prev.filter(evaluation => {
+          const interview = interviews.find(i => i.id === interviewId)
+          return !interview?.sessions?.some((s: any) => s.id === evaluation.sessionId)
+        }))
+      } else {
+        alert('Failed to delete interview')
+      }
+    } catch (error) {
+      console.error('Error deleting interview:', error)
+      alert('Failed to delete interview')
+    } finally {
+      setDeletingInterview(null)
+    }
+  }
+
+  if (isChecking || loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-12 text-center">
         <p>Loading dashboard...</p>
@@ -153,7 +185,16 @@ export default function Dashboard() {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="font-semibold text-gray-900">Overall Score</h3>
                 <p className="text-3xl font-bold text-gray-900">
-                  {selectedEvaluation.scores ? Object.values(selectedEvaluation.scores).reduce((a: any, b: any) => a + (b.score || 0), 0) / Object.keys(selectedEvaluation.scores).length : 0}/100
+                {(() => {
+                if (!selectedEvaluation.scores) return 0
+
+                const values = Object.values(selectedEvaluation.scores) as any[]
+                if (values.length === 0) return 0
+
+                const total = values.reduce((sum, item) => sum + (item?.score ?? 0), 0)
+                return Math.round(total / values.length)
+              })()}/100
+
                 </p>
               </div>
               <div className="bg-gray-50 p-4 rounded-lg">
@@ -235,9 +276,17 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Interview Dashboard</h1>
-        <p className="text-gray-600">Manage interviews and review candidate evaluations</p>
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Interview Dashboard</h1>
+          <p className="text-gray-600">Manage interviews and review candidate evaluations</p>
+        </div>
+        <Button
+          variant="destructive"
+          onClick={logout}
+        >
+          Logout
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -269,6 +318,14 @@ export default function Dashboard() {
                         onClick={() => copyInterviewLink(interview.id)}
                       >
                         Copy Link
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deleteInterview(interview.id, interview.role)}
+                        disabled={deletingInterview === interview.id}
+                      >
+                        {deletingInterview === interview.id ? 'Deleting...' : 'Delete'}
                       </Button>
                     </div>
                     {interview.sessions && interview.sessions.length > 0 && (
@@ -329,12 +386,22 @@ export default function Dashboard() {
                       <span className="text-sm text-gray-500">
                         Confidence: {Math.round(evaluation.confidence * 100)}%
                       </span>
-                      <Button
-                        size="sm"
-                        onClick={() => viewDetails(evaluation.sessionId)}
-                      >
-                        View Details
-                      </Button>
+                      <div className="flex space-x-2">
+                        <Button
+                          size="sm"
+                          onClick={() => viewDetails(evaluation.sessionId)}
+                        >
+                          View Details
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => deleteSession(evaluation.sessionId, evaluation.candidateName)}
+                          disabled={deletingSession === evaluation.sessionId}
+                        >
+                          {deletingSession === evaluation.sessionId ? 'Deleting...' : 'Delete'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}

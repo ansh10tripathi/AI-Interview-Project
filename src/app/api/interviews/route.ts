@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { InterviewConfig } from '@/types/interview';
-import { requireAdmin } from '@/lib/auth';
+import { requireAdminFromRequest } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
-    requireAdmin(request);
+    requireAdminFromRequest(request);
     const config: InterviewConfig = await request.json();
     
     const interview = await prisma.interview.create({
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    requireAdmin(request);
+    requireAdminFromRequest(request);
     const interviews = await prisma.interview.findMany({
       orderBy: { createdAt: 'desc' },
       include: {

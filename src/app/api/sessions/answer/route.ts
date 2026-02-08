@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
         console.log('[Answer Submit] Evaluation generated:', {
           overallScore: evaluation?.overallScore,
           recommendation: evaluation?.recommendation,
-          hasSkillBreakdown: !!evaluation?.skillBreakdown
+          hasSkillBreakdown: !!((evaluation as any)?.skillBreakdown || (evaluation as any)?.scores)
         });
         
         if (!evaluation || typeof evaluation.overallScore !== 'number') {
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
         await prisma.evaluation.create({
           data: {
             sessionId,
-            scores: JSON.stringify(evaluation.skillBreakdown || {}),
+            scores: JSON.stringify((evaluation as any).skillBreakdown || (evaluation as any).scores || {}),
             evidence: JSON.stringify([]),
             recommendation: evaluation.recommendation || 'review',
             confidence: evaluation.confidence || 0.5,

@@ -8,18 +8,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { InterviewConfig } from '@/types/interview'
 import { useRoleGuard } from '@/lib/useRoleGuard'
 import { useEffect } from 'react'
+import { logout } from '@/lib/logout'
 
 export default function CreateInterview() {
-  const router = useRouter()
-  const isCandidate = typeof window !== 'undefined' && window.location.pathname.startsWith('/interview')
-  
-  useEffect(() => {
-    if (isCandidate) {
-      router.push('/interview')
-    }
-  }, [isCandidate, router])
-  
-  useRoleGuard('admin');
+  const isChecking = useRoleGuard('admin');
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [config, setConfig] = useState<Partial<InterviewConfig>>({
@@ -91,12 +83,28 @@ export default function CreateInterview() {
     }))
   }
 
+  if (isChecking) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-12 text-center">
+        <p>Loading...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="bg-white shadow-sm rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h1 className="text-2xl font-bold text-gray-900">Create Interview</h1>
-          <p className="text-gray-600">Configure your AI interviewer</p>
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Create Interview</h1>
+            <p className="text-gray-600">Configure your AI interviewer</p>
+          </div>
+          <Button
+            variant="destructive"
+            onClick={logout}
+          >
+            Logout
+          </Button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">

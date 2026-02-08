@@ -6,28 +6,115 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { InterviewQuestion, InterviewEvaluation } from '@/types/interview'
+import { getHomeRoute } from '@/lib/navigation'
 
 export default function InterviewPage() {
   const searchParams = useSearchParams()
   const interviewId = searchParams.get('id')
   
-  const [step, setStep] = useState<'start' | 'interview' | 'complete'>('start')
+  const [step, setStep] = useState<'start' | 'interview' | 'complete' | 'locked' | 'ended'>('start')
   const [candidateName, setCandidateName] = useState('')
   const [candidateEmail, setCandidateEmail] = useState('')
+  const [emailError, setEmailError] = useState('')
   const [sessionId, setSessionId] = useState('')
   const [currentQuestion, setCurrentQuestion] = useState<InterviewQuestion | null>(null)
   const [answer, setAnswer] = useState('')
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [questionIndex, setQuestionIndex] = useState(0)
   const [evaluation, setEvaluation] = useState<InterviewEvaluation | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleReturnHome = async () => {
+    const homeRoute = await getHomeRoute();
+    window.location.href = homeRoute;
+  }
+
+  // Check for existing session on load
+  useEffect(() => {
+    const savedSessionId = localStorage.getItem(`interview-session-${interviewId}`)
+    if (savedSessionId) {
+      setSessionId(savedSessionId)
+      resumeInterview(savedSessionId)
+    }
+  }, [interviewId])
+
+  const resumeInterview = async (sessionId: string) => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`)
+      const result = await response.json()
+      
+      if (result.success) {
+        const session = result.session
+        
+        if (session.status === 'locked') {
+          setStep('locked')
+          return
+        }
+        
+        if (session.status === 'completed') {
+          setStep('complete')
+          setCandidateName(session.candidateName)
+          setCandidateEmail(session.candidateEmail)
+          if (session.evaluation) {
+            try {
+              setEvaluation(JSON.parse(session.evaluation))
+            } catch (e) {
+              console.error('Failed to parse evaluation:', e)
+            }
+          }
+        } else if (session.status === 'active') {
+          setStep('interview')
+          setCandidateName(session.candidateName)
+          setCandidateEmail(session.candidateEmail)
+          
+          if (session.currentQuestion && session.currentQuestion.text) {
+            setCurrentQuestion(session.currentQuestion)
+            setQuestionIndex(session.currentStep || 0)
+            setProgress(session.progress || 0)
+          } else {
+            setError('Failed to load interview question. Please refresh the page.')
+          }
+        }
+      } else {
+        localStorage.removeItem(`interview-session-${interviewId}`)
+        setStep('start')
+      }
+    } catch (error) {
+      console.error('Error resuming interview:', error)
+      localStorage.removeItem(`interview-session-${interviewId}`)
+      setStep('start')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
 
   const startInterview = async () => {
-    if (!candidateName || !candidateEmail) {
-      alert('Please enter your name and email')
+    if (!candidateName.trim()) {
+      alert('Please enter your full name')
       return
     }
 
+    if (!candidateEmail.trim()) {
+      alert('Please enter your email address')
+      return
+    }
+
+    if (!validateEmail(candidateEmail)) {
+      setEmailError('Please enter a valid email address')
+      return
+    }
+
+    setEmailError('')
     setLoading(true)
+    setError(null)
+    
     try {
       const response = await fetch('/api/sessions/start', {
         method: 'POST',
@@ -42,15 +129,27 @@ export default function InterviewPage() {
       const result = await response.json()
       
       if (result.success) {
+        if (!result.question || !result.question.text) {
+          setError('Failed to generate interview question. Please try again.')
+          return
+        }
+        
         setSessionId(result.sessionId)
         setCurrentQuestion(result.question)
+        setQuestionIndex(result.questionIndex || 0)
+        setProgress(result.progress || 0)
         setStep('interview')
+        localStorage.setItem(`interview-session-${interviewId}`, result.sessionId)
       } else {
-        alert('Failed to start interview')
+        if (result.error?.includes('already completed')) {
+          setError('You have already completed this interview. You cannot retake it.')
+        } else {
+          setError(result.error || 'Failed to start interview')
+        }
       }
     } catch (error) {
       console.error('Error:', error)
-      alert('Failed to start interview')
+      setError('Failed to start interview. Please check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -79,13 +178,29 @@ export default function InterviewPage() {
         if (result.isComplete) {
           setEvaluation(result.evaluation)
           setStep('complete')
+          localStorage.removeItem(`interview-session-${interviewId}`)
         } else {
-          setCurrentQuestion(result.nextQuestion)
-          setProgress(result.progress || 0)
+          if (result.nextQuestion) {
+            setCurrentQuestion(result.nextQuestion)
+          }
+          if (typeof result.progress === 'number') {
+            setProgress(result.progress)
+          }
+          if (typeof result.updatedStep === 'number') {
+            setQuestionIndex(result.updatedStep)
+          }
           setAnswer('')
         }
       } else {
-        alert('Failed to submit answer')
+        if (result.error?.includes('already completed')) {
+          setStep('complete')
+          localStorage.removeItem(`interview-session-${interviewId}`)
+        } else if (result.error?.includes('session has ended')) {
+          setStep('ended')
+          localStorage.removeItem(`interview-session-${interviewId}`)
+        } else {
+          setError(result.error || 'Failed to submit answer')
+        }
       }
     } catch (error) {
       console.error('Error:', error)
@@ -100,6 +215,55 @@ export default function InterviewPage() {
       <div className="max-w-2xl mx-auto px-4 py-12 text-center">
         <h1 className="text-2xl font-bold text-gray-900">Invalid Interview Link</h1>
         <p className="text-gray-600 mt-2">Please check your interview link and try again.</p>
+      </div>
+    )
+  }
+
+  if (step === 'locked') {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-12 text-center">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-8">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Interview Locked</h1>
+          <p className="text-gray-600 mb-4">
+            This interview session has been locked by the administrator.
+          </p>
+          <p className="text-sm text-gray-500">
+            Please contact the interviewer if you believe this is an error.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (step === 'ended') {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-12 text-center">
+        <h1 className="text-2xl font-bold text-gray-900">Interview Session Ended</h1>
+        <p className="text-gray-600 mt-2">This interview session has been terminated by the administrator.</p>
+        <p className="text-gray-500 mt-4">Please contact the interviewer if you believe this is an error.</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-12 text-center">
+        <h1 className="text-2xl font-bold text-red-600">Error</h1>
+        <p className="text-gray-600 mt-2">{error}</p>
+        <Button 
+          onClick={() => {
+            setError(null)
+            setStep('start')
+          }} 
+          className="mt-4"
+        >
+          Try Again
+        </Button>
       </div>
     )
   }
@@ -132,9 +296,16 @@ export default function InterviewPage() {
               <Input
                 type="email"
                 value={candidateEmail}
-                onChange={(e) => setCandidateEmail(e.target.value)}
+                onChange={(e) => {
+                  setCandidateEmail(e.target.value)
+                  setEmailError('')
+                }}
                 placeholder="Enter your email address"
+                className={emailError ? 'border-red-500' : ''}
               />
+              {emailError && (
+                <p className="text-red-600 text-sm mt-1">{emailError}</p>
+              )}
             </div>
           </div>
 
@@ -153,13 +324,34 @@ export default function InterviewPage() {
   }
 
   if (step === 'interview') {
+    if (loading) {
+      return (
+        <div className="max-w-4xl mx-auto px-4 py-12">
+          <div className="bg-white shadow-sm rounded-lg p-8 text-center">
+            <p className="text-gray-600">Loading interview...</p>
+          </div>
+        </div>
+      )
+    }
+
+    if (!currentQuestion) {
+      return (
+        <div className="max-w-4xl mx-auto px-4 py-12">
+          <div className="bg-white shadow-sm rounded-lg p-8 text-center">
+            <p className="text-red-600 mb-4">Failed to load interview question</p>
+            <Button onClick={() => setStep('start')}>Return to Start</Button>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="max-w-4xl mx-auto px-4 py-12">
         <div className="bg-white shadow-sm rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex justify-between items-center">
               <h1 className="text-xl font-bold text-gray-900">Interview in Progress</h1>
-              <span className="text-sm text-gray-500">{Math.round(progress)}% Complete</span>
+              <span className="text-sm text-gray-500">Question {questionIndex + 1} of 5</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
               <div
@@ -170,8 +362,8 @@ export default function InterviewPage() {
           </div>
 
           <div className="p-6">
-            {currentQuestion && (
-              <div className="space-y-6">
+            {currentQuestion ? (
+              <div className="space-y-6" key={currentQuestion.id}>
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 mb-4">
                     Question
@@ -207,6 +399,8 @@ export default function InterviewPage() {
                   </Button>
                 </div>
               </div>
+            ) : (
+              <p className="text-gray-500">Loading question...</p>
             )}
           </div>
         </div>
@@ -218,10 +412,17 @@ export default function InterviewPage() {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12">
         <div className="bg-white shadow-sm rounded-lg p-8 text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Interview Complete!</h1>
-          <p className="text-gray-600 mb-8">
-            Thank you for completing the interview. Your responses have been recorded and will be reviewed by our team.
-          </p>
+          <div className="mb-6">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Interview Complete!</h1>
+            <p className="text-gray-600">
+              Thank you for completing the interview. Your responses have been recorded and will be reviewed by our team.
+            </p>
+          </div>
           
           {evaluation && (
             <div className="bg-gray-50 p-6 rounded-lg text-left">
@@ -245,8 +446,11 @@ export default function InterviewPage() {
             </div>
           )}
 
-          <div className="mt-8">
-            <Button onClick={() => window.location.href = '/'}>
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <p className="text-sm text-gray-500 mb-4">
+              You have already completed this interview. You cannot retake or modify your answers.
+            </p>
+            <Button onClick={handleReturnHome} variant="outline">
               Return to Home
             </Button>
           </div>
