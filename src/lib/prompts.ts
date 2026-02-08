@@ -1,27 +1,23 @@
 export const QUESTION_GENERATION_PROMPT = `
-You are an expert technical interviewer. Generate the next interview question based on:
+You are an AI technical interviewer for a {role} position.
 
 Role: {role}
 Skills to evaluate: {skills}
 Difficulty: {difficulty}
-Interview style: {style}
-Current step: {currentStep}
-Previous responses: {previousResponses}
+Question index: {currentStep}
 
-Generate a JSON response with:
+Generate ONE technical question that:
+1. Tests the skill: {targetSkill}
+2. Is specific to {role} responsibilities
+3. Matches {difficulty} level
+4. Is NOT generic or behavioral
+
+Return JSON:
 {
-  "question": "The interview question text",
-  "skill": "Primary skill being evaluated",
-  "followUps": ["potential follow-up questions"],
-  "expectedPoints": ["key points a good answer should cover"]
+  "question": "One specific technical question",
+  "skill": "{targetSkill}",
+  "expectedPoints": ["key technical points"]
 }
-
-Make questions:
-- Role-specific and practical
-- Progressive in difficulty
-- Building on previous answers when relevant
-- Appropriate for {difficulty} level
-- Matching {style} tone (friendly/neutral/strict)
 `;
 
 export const ANSWER_EVALUATION_PROMPT = `
@@ -33,22 +29,32 @@ Skill Being Evaluated: {skill}
 Expected Points: {expectedPoints}
 Difficulty Level: {difficulty}
 
-Evaluate and return JSON:
+Analyze the answer and return JSON:
 {
   "score": 0-100,
-  "evidence": ["specific quotes or points from the answer"],
+  "evidence": ["specific quotes or points from the answer that demonstrate competency"],
   "strengths": ["what they did well"],
   "weaknesses": ["areas for improvement"],
   "confidence": 0.0-1.0,
   "redFlags": ["any concerning responses"]
 }
 
-Be fair but thorough. Look for:
-- Technical accuracy
-- Depth of understanding
-- Real-world experience
-- Communication clarity
+Scoring criteria:
+- 90-100: Exceptional - Deep understanding, real-world experience, best practices
+- 75-89: Strong - Good technical knowledge, clear communication, practical approach
+- 60-74: Adequate - Basic understanding, some gaps, needs more depth
+- 40-59: Weak - Significant gaps, unclear explanations, limited knowledge
+- 0-39: Poor - Fundamental misunderstandings, off-topic, or no meaningful content
+
+Evaluate based on:
+- Technical accuracy and depth
+- Evidence of real-world experience
 - Problem-solving approach
+- Communication clarity
+- Coverage of expected points
+- Appropriate for {difficulty} level
+
+Be objective and vary scores based on actual answer quality.
 `;
 
 export const FINAL_EVALUATION_PROMPT = `
@@ -65,7 +71,7 @@ Generate final evaluation JSON:
   "skillBreakdown": {
     "skillName": {
       "score": 0-100,
-      "evidence": ["supporting quotes"],
+      "evidence": ["supporting quotes from answers"],
       "confidence": 0.0-1.0
     }
   },
@@ -74,12 +80,22 @@ Generate final evaluation JSON:
   "confidence": 0.0-1.0
 }
 
+Calculate overallScore as the average of all skill scores from individualScores.
+Calculate confidence as the average of all individual confidence scores.
+
+Recommendation guidelines:
+- "proceed": overallScore >= 75 and no major red flags
+- "borderline": overallScore 60-74 or some concerns
+- "review": overallScore < 60 or significant red flags
+
 Consider:
 - Consistency across answers
 - Depth vs breadth of knowledge
 - Communication quality
 - Red flags from rubric
 - Overall fit for {role} at {difficulty} level
+
+Base all scores on actual candidate responses, not assumptions.
 `;
 
 export const FOLLOW_UP_PROMPT = `
