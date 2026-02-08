@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAdmin } from '@/lib/auth';
+import { requireAdminFromRequest } from '@/lib/auth';
 
 export async function DELETE(request: NextRequest) {
   try {
-    requireAdmin(request);
+    requireAdminFromRequest(request);
     
     const { sessionId } = await request.json();
     
