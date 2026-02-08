@@ -1,18 +1,34 @@
 'use client'
 
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
 export function useRoleGuard(requiredRole: 'admin' | 'candidate') {
   const router = useRouter()
-  const searchParams = useSearchParams()
+  const [isChecking, setIsChecking] = useState(true)
   
   useEffect(() => {
-    const isCandidate = window.location.pathname.startsWith('/interview') || 
-                       searchParams.get('role') === 'candidate'
-    
-    if (requiredRole === 'admin' && isCandidate) {
-      router.push('/interview')
+    const checkAuth = async () => {
+      if (requiredRole === 'admin') {
+        try {
+          const response = await fetch('/api/auth/check')
+          const result = await response.json()
+          
+          if (!result.authenticated || result.role !== 'admin') {
+            router.push('/login')
+            return
+          }
+          setIsChecking(false)
+        } catch (error) {
+          router.push('/login')
+        }
+      } else {
+        setIsChecking(false)
+      }
     }
-  }, [requiredRole, router, searchParams])
+    
+    checkAuth()
+  }, [requiredRole, router])
+  
+  return isChecking
 }

@@ -1,14 +1,69 @@
+import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 
-export const MAX_ACTIVE_SESSIONS = 5;
+export type UserRole = 'admin' | 'candidate';
 
-export function isCandidate(request: NextRequest): boolean {
-  const url = new URL(request.url);
-  return url.pathname.startsWith('/interview') || url.searchParams.get('role') === 'candidate';
+export interface AuthUser {
+  id: string;
+  role: UserRole;
+  email?: string;
 }
 
-export function requireAdmin(request: NextRequest) {
-  if (isCandidate(request)) {
-    throw new Error('Admin access required');
+const ADMIN_SECRET = process.env.ADMIN_SECRET || 'change-this-in-production';
+
+export const MAX_ACTIVE_SESSIONS = 100;
+
+export async function getServerAuth(): Promise<AuthUser | null> {
+  const cookieStore = cookies();
+  const authToken = cookieStore.get('auth_token')?.value;
+  
+  if (!authToken) {
+    return null;
   }
+
+  if (authToken === ADMIN_SECRET) {
+    return {
+      id: 'admin',
+      role: 'admin'
+    };
+  }
+
+  return null;
+}
+
+export async function requireAdmin(): Promise<AuthUser> {
+  const user = await getServerAuth();
+  
+  if (!user || user.role !== 'admin') {
+    throw new Error('Unauthorized: Admin access required');
+  }
+  
+  return user;
+}
+
+export function getAuthFromRequest(request: NextRequest): AuthUser | null {
+  const authToken = request.cookies.get('auth_token')?.value;
+  
+  if (!authToken) {
+    return null;
+  }
+
+  if (authToken === ADMIN_SECRET) {
+    return {
+      id: 'admin',
+      role: 'admin'
+    };
+  }
+
+  return null;
+}
+
+export function requireAdminFromRequest(request: NextRequest): AuthUser {
+  const user = getAuthFromRequest(request);
+  
+  if (!user || user.role !== 'admin') {
+    throw new Error('Unauthorized: Admin access required');
+  }
+  
+  return user;
 }
