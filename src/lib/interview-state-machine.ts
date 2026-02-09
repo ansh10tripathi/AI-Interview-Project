@@ -182,26 +182,34 @@ export class InterviewStateMachine {
     } catch (error) {
       console.error('[State Machine] Error generating final evaluation:', error);
       
+      // Preserve individual scores and create meaningful fallback
       const avgScore = Math.round(
-        individualScores.reduce((sum, s) => sum + s.score, 0) / individualScores.length
+        individualScores.reduce((sum, s) => sum + (s.score || 0), 0) / individualScores.length
       );
+      
+      const skillBreakdown = individualScores.reduce((acc, item) => {
+        const skill = item.skill || 'General';
+        if (!acc[skill]) {
+          acc[skill] = {
+            score: Math.max(0, Math.min(100, item.score || 0)),
+            evidence: Array.isArray(item.evidence) ? item.evidence : ['Response provided']
+          };
+        }
+        return acc;
+      }, {} as any);
+      
+      const allRedFlags = individualScores.flatMap(s => s.redFlags || []);
+      allRedFlags.push('Evaluation parsing failed');
       
       console.log('[State Machine] Using fallback evaluation with avgScore:', avgScore);
       
       return {
         overallScore: avgScore,
-        recommendation: avgScore >= 75 ? 'proceed' : avgScore >= 60 ? 'borderline' : 'review',
-        skillBreakdown: individualScores.reduce((acc, item) => {
-          acc[item.skill] = {
-            score: item.score,
-            evidence: item.evidence,
-            confidence: item.confidence
-          };
-          return acc;
-        }, {} as any),
-        redFlags: individualScores.flatMap(s => s.redFlags || []),
-        summary: `Interview completed with ${avgScore}/100 overall score. Evaluation generated with limited analysis.`,
-        confidence: 0.5
+        recommendation: avgScore >= 75 ? 'proceed' : avgScore >= 50 ? 'review' : 'reject',
+        skillBreakdown,
+        redFlags: [...new Set(allRedFlags)],
+        summary: `Interview completed with ${avgScore}/100 overall score. Technical evaluation completed with some processing limitations.`,
+        confidence: 0.6
       };
     }
   }
